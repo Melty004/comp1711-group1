@@ -1,96 +1,113 @@
-// 预处理指令，用于禁用特定编译器警告
-#define _CRT_SECURE_NO_WARNINGS
-
-// 包含标准输入输出库、标准库和字符串库的头文件
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// 定义用于存储健康数据的结构体
+// Define the struct for the fitness data
 typedef struct {
     char date[11];
     char time[6];
     int steps;
 } FitnessData;
 
-// 函数用于将记录分词
-void tokeniseRecord(char* record, char delimiter, char* date, char* time, int* steps) {
-    // 使用strtok函数将记录按照指定分隔符进行分词
-    char* ptr = strtok(record, &delimiter);
+// Function to tokenize a record
+int tokeniseRecord(char *record, char delimiter, char *date, char *time, int *steps) {
+    char *ptr = strtok(record, &delimiter);
     if (ptr != NULL) {
-        // 将分词结果复制到对应的变量中
         strcpy(date, ptr);
         ptr = strtok(NULL, &delimiter);
         if (ptr != NULL) {
             strcpy(time, ptr);
             ptr = strtok(NULL, &delimiter);
             if (ptr != NULL) {
-                // 将步数转换为整数并存储
                 *steps = atoi(ptr);
+                return 1;  // Successful tokenization
             }
         }
     }
+
+    // Handle unexpected input
+    printf("Error parsing data. Check the file format.\n");
+    return 0;  // Tokenization failed
 }
 
-// 用于qsort排序的比较函数
-int compareFitnessData(const void* a, const void* b) {
-    FitnessData* data1 = (FitnessData*)a;
-    FitnessData* data2 = (FitnessData*)b;
-    // 按照步数降序排序
-    return data2->steps - data1->steps;
+// Function to compare fitness data for sorting
+int compareFitnessData(const void *a, const void *b) {
+    return ((FitnessData *)b)->steps - ((FitnessData *)a)->steps;
 }
 
-// 主函数
 int main() {
-    // 存储文件名的字符数组
-    char filename[256];
-    printf("Enter Filename: ");
-    scanf("%255s", filename); // 从用户输入中读取文件名
+    char filename[100];
+    FILE *file;
 
-    // 打开文件以供读取
-    FILE* file = fopen(filename, "r");
-    if (!file) {
-        fprintf(stderr, "Could not open file %s\n", filename);
+    // Step 1: Provide a menu option to specify a filename
+    printf("Enter Filename: ");
+    scanf("%s", filename);
+
+    // Step 2: Process the data file
+    file = fopen(filename, "r");
+    if (file == NULL) {
+        printf("Error opening file. Check the filename and try again.\n");
         return 1;
     }
 
-    // 读取数据并存储到FitnessData数组中
-    FitnessData data[1000]; // 假设不会有超过1000条记录
+    char line[100];
     int count = 0;
-    char buffer[256];
-    while (fgets(buffer, sizeof(buffer), file)) {
-        // 调用tokeniseRecord函数将读取的每一行数据进行分词
-        tokeniseRecord(buffer, ',', data[count].date, data[count].time, &data[count].steps);
+    while (fgets(line, sizeof(line), file) != NULL) {
         count++;
     }
-    fclose(file);
+    rewind(file);
 
-    // 对数组进行排序
-    qsort(data, count, sizeof(FitnessData), compareFitnessData);
-
-    // 将文件扩展名更改为.tsv
-    char* dot = strrchr(filename, '.');
-    if (dot) {
-        strcpy(dot, ".csv.tsv");
-    }
-    else {
-        strcat(filename, ".csv.tsv");
-    }
-
-    // 打开文件以供写入
-    file = fopen(filename, "w");
-    if (!file) {
-        fprintf(stderr, "Could not open file %s\n", filename);
+    FitnessData *data = malloc(count * sizeof(FitnessData));
+    if (data == NULL) {
+        printf("Memory allocation failed.\n");
+        fclose(file);
         return 1;
     }
 
-    // 将排序后的数据写入文件
-    for (int i = 0; i < count; i++) {
+    int i = 0;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (!tokeniseRecord(line, '\t', data[i].date, data[i].time, &data[i].steps)) {
+            printf("Error parsing data in line %d: %s\n", i + 1, line);
+            fclose(file);
+            free(data);
+            return 1;
+        }
+        i++;
+    }
+
+    fclose(file);
+
+    // Step 3: Sort the data by descending order of step count
+    qsort(data, count, sizeof(FitnessData), compareFitnessData);
+
+    // Step 4: Write out the sorted data file in .tsv format
+    char *outputFilename = malloc(strlen(filename) + 5);  // +5 for ".tsv\0"
+    if (outputFilename == NULL) {
+        printf("Error allocating memory.\n");
+        free(data);
+        return 1;
+    }
+
+    sprintf(outputFilename, "%s.tsv", filename);
+
+    file = fopen(outputFilename, "w");
+    if (file == NULL) {
+        printf("Error creating output file.\n");
+        free(data);
+        free(outputFilename);
+        return 1;
+    }
+
+    for (i = 0; i < count; i++) {
         fprintf(file, "%s\t%s\t%d\n", data[i].date, data[i].time, data[i].steps);
     }
 
     fclose(file);
 
-    printf("Data sorted and written to %s\n", filename);
+    free(data);
+    free(outputFilename);
+
+    printf("Sorting and writing successful. Output file: %s\n", outputFilename);
+
     return 0;
 }
